@@ -31,7 +31,7 @@ const loadShader = async () => {
 
   const secondMatrix = new Float32Array([
     0, 0, 0, 0, 1,
-    2000000, 2000000, 0, 0, 1
+    2, 2, 0, 0, 1
   ]);
 
   const gpuBufferSecondMatrix = device.createBuffer({
