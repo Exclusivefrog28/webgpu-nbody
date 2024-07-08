@@ -1,118 +1,126 @@
 const loadShader = async () => {
-  let shaderCode = await fetch('shader/matrix.wgsl');
-  return await shaderCode.text()
+	let shaderCode = await fetch('shader/matrix.wgsl');
+	return await shaderCode.text()
+}
+
+const display = document.getElementById("display");
+const displayObjects = (matrix) => {
+	for (const [index, element] of Array.from(display.children).entries()) {
+		element.style.left = `${(matrix[index * 5] / (window.innerWidth / 10)) * 100 + 50}%`;
+		element.style.top = `${(matrix[index * 5 + 1] / (window.innerHeight / 10)) * 100 + 50}%`;
+	}
 }
 
 (async () => {
-  const adapter = await navigator.gpu.requestAdapter();
-  if (!adapter) {
-    return;
-  }
-  const device = await adapter.requestDevice();
+	const adapter = await navigator.gpu.requestAdapter();
+	if (!adapter) {
+		return;
+	}
+	const device = await adapter.requestDevice();
 
-  // First Matrix
+	// First Matrix
 
-  const firstMatrix = new Float32Array([
-    0, 0, 0, 0, 1,
-    2, 2, 0, 0, 1
-  ]);
+	const firstMatrix = new Float32Array([
+		0, 0, 0, 0, 10,
+		16, 0, 0, -.75, 1,
+		-16, 0, 0, .75, 1
+	]);
 
-  const gpuBufferFirstMatrix = device.createBuffer({
-    mappedAtCreation: true,
-    size: firstMatrix.byteLength,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
-  });
-  const arrayBufferFirstMatrix = gpuBufferFirstMatrix.getMappedRange();
-  new Float32Array(arrayBufferFirstMatrix).set(firstMatrix);
-  gpuBufferFirstMatrix.unmap();
-
-
-  // Second Matrix
-
-  const secondMatrix = new Float32Array([
-    0, 0, 0, 0, 1,
-    2, 2, 0, 0, 1
-  ]);
-
-  const gpuBufferSecondMatrix = device.createBuffer({
-    mappedAtCreation: true,
-    size: secondMatrix.byteLength,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
-  });
-  const arrayBufferSecondMatrix = gpuBufferSecondMatrix.getMappedRange();
-  new Float32Array(arrayBufferSecondMatrix).set(secondMatrix);
-  gpuBufferSecondMatrix.unmap();
+	const gpuBufferFirstMatrix = device.createBuffer({
+		mappedAtCreation: true,
+		size: firstMatrix.byteLength,
+		usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+	});
+	const arrayBufferFirstMatrix = gpuBufferFirstMatrix.getMappedRange();
+	new Float32Array(arrayBufferFirstMatrix).set(firstMatrix);
+	gpuBufferFirstMatrix.unmap();
 
 
-  const shaderModule = device.createShaderModule({
-    code: await loadShader()
-  });
+	// Second Matrix
 
-  const computePipeline = device.createComputePipeline({
-    layout: "auto",
-    compute: {
-      module: shaderModule,
-      entryPoint: "main"
-    }
-  });
+	const secondMatrix = firstMatrix
 
-  const bindGroup = device.createBindGroup({
-    layout: computePipeline.getBindGroupLayout(0 /* index */),
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gpuBufferFirstMatrix
-        }
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: gpuBufferSecondMatrix
-        }
-      }
-    ]
-  });
+	const gpuBufferSecondMatrix = device.createBuffer({
+		mappedAtCreation: true,
+		size: secondMatrix.byteLength,
+		usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+	});
+	const arrayBufferSecondMatrix = gpuBufferSecondMatrix.getMappedRange();
+	new Float32Array(arrayBufferSecondMatrix).set(secondMatrix);
+	gpuBufferSecondMatrix.unmap();
 
-  const commandEncoder = device.createCommandEncoder();
 
-  const passEncoder = commandEncoder.beginComputePass();
-  passEncoder.setPipeline(computePipeline);
-  passEncoder.setBindGroup(0, bindGroup);
-  const workgroupCount = Math.ceil((firstMatrix.length / 5) / 8);
-  passEncoder.dispatchWorkgroups(workgroupCount);
-  passEncoder.end();
+	const shaderModule = device.createShaderModule({
+		code: await loadShader()
+	});
 
-  // Get a GPU buffer for reading in an unmapped state.
-  const gpuReadBuffer = device.createBuffer({
-    size: secondMatrix.byteLength,
-    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-  });
+	const computePipeline = device.createComputePipeline({
+		layout: "auto",
+		compute: {
+			module: shaderModule,
+			entryPoint: "main"
+		}
+	});
 
-  // Encode commands for copying buffer to buffer.
-  commandEncoder.copyBufferToBuffer(
-    gpuBufferSecondMatrix /* source buffer */,
-    0 /* source offset */,
-    gpuBufferFirstMatrix /* destination buffer */,
-    0 /* destination offset */,
-    secondMatrix.byteLength /* size */
-  );
-  commandEncoder.copyBufferToBuffer(
-    gpuBufferSecondMatrix /* source buffer */,
-    0 /* source offset */,
-    gpuReadBuffer /* destination buffer */,
-    0 /* destination offset */,
-    secondMatrix.byteLength /* size */
-  );
+	const bindGroup = device.createBindGroup({
+		layout: computePipeline.getBindGroupLayout(0 /* index */),
+		entries: [
+			{
+				binding: 0,
+				resource: {
+					buffer: gpuBufferFirstMatrix
+				}
+			},
+			{
+				binding: 1,
+				resource: {
+					buffer: gpuBufferSecondMatrix
+				}
+			}
+		]
+	});
 
-  // Submit GPU commands.
-  const gpuCommands = commandEncoder.finish();
-  device.queue.submit([gpuCommands]);
+	setInterval(async () => {
+		const commandEncoder = device.createCommandEncoder();
 
-  // Read buffer.
-  await gpuReadBuffer.mapAsync(GPUMapMode.READ);
-  const arrayBuffer = gpuReadBuffer.getMappedRange();
-  console.log(new Float32Array(arrayBuffer));
+		const passEncoder = commandEncoder.beginComputePass();
+		passEncoder.setPipeline(computePipeline);
+		passEncoder.setBindGroup(0, bindGroup);
+		const workgroupCount = Math.ceil((firstMatrix.length / 5) / 8);
+		passEncoder.dispatchWorkgroups(workgroupCount);
+		passEncoder.end();
+	
+		// Get a GPU buffer for reading in an unmapped state.
+		const gpuReadBuffer = device.createBuffer({
+			size: secondMatrix.byteLength,
+			usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+		});
+	
+		// Encode commands for copying buffer to buffer.
+		commandEncoder.copyBufferToBuffer(
+			gpuBufferSecondMatrix /* source buffer */,
+			0 /* source offset */,
+			gpuBufferFirstMatrix /* destination buffer */,
+			0 /* destination offset */,
+			secondMatrix.byteLength /* size */
+		);
+		commandEncoder.copyBufferToBuffer(
+			gpuBufferSecondMatrix /* source buffer */,
+			0 /* source offset */,
+			gpuReadBuffer /* destination buffer */,
+			0 /* destination offset */,
+			secondMatrix.byteLength /* size */
+		);
+
+		// Submit GPU commands.
+		const gpuCommands = commandEncoder.finish();
+		device.queue.submit([gpuCommands]);
+
+		// Read buffer.
+		await gpuReadBuffer.mapAsync(GPUMapMode.READ);
+		const arrayBuffer = gpuReadBuffer.getMappedRange();
+		displayObjects(new Float32Array(arrayBuffer));
+	}, 16.67);
 
 })();
 

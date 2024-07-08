@@ -1,7 +1,7 @@
 @group(0) @binding(0) var<storage, read> firstMatrix : array<f32>;
 @group(0) @binding(1) var<storage, read_write> secondMatrix : array<f32>;
 
-const gravParam = 0.01;
+const gravParam = 1;
 
 @compute @workgroup_size(8)
 
@@ -28,7 +28,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
         let squaredDistance = pathBetween.x * pathBetween.x + pathBetween.y * pathBetween.y;
 
         let force = gravParam * ((mass * otherMass) / squaredDistance);
-        acceleration = vec2(acceleration.x + direction.x * force, acceleration.y + direction.y * force);
+        acceleration = vec2(acceleration.x + direction.x * (force / mass), acceleration.y + direction.y * (force / mass));
     }
     
     velocity = vec2(velocity.x + acceleration.x, velocity.y + acceleration.y);
