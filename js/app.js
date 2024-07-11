@@ -3,11 +3,19 @@ const loadShader = async () => {
 	return await shaderCode.text()
 }
 
+const frameRate = 144;
+const frameTime = 1 / frameRate * 1000;
+
 const display = document.getElementById("display");
+const objects = Array.from(display.children).slice(0, 3);
+
+objects.forEach((element)=>{
+	element.style.transition = `transform ${frameTime}ms linear`
+})
+
 const displayObjects = (matrix) => {
-	for (const [index, element] of Array.from(display.children).entries()) {
-		element.style.left = `${(matrix[index * 5] / (window.innerWidth / 10)) * 100 + 50}%`;
-		element.style.top = `${(matrix[index * 5 + 1] / (window.innerHeight / 10)) * 100 + 50}%`;
+	for (const [index, element] of objects.entries()) {
+		element.style.transform = `translate(${(matrix[index * 5] * 10).toFixed(0)}px, ${(matrix[index * 5 + 1] * 10).toFixed(0)}px)`;
 	}
 }
 
@@ -89,13 +97,13 @@ const displayObjects = (matrix) => {
 		const workgroupCount = Math.ceil((firstMatrix.length / 5) / 8);
 		passEncoder.dispatchWorkgroups(workgroupCount);
 		passEncoder.end();
-	
+
 		// Get a GPU buffer for reading in an unmapped state.
 		const gpuReadBuffer = device.createBuffer({
 			size: secondMatrix.byteLength,
 			usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
 		});
-	
+
 		// Encode commands for copying buffer to buffer.
 		commandEncoder.copyBufferToBuffer(
 			gpuBufferSecondMatrix /* source buffer */,
@@ -120,7 +128,7 @@ const displayObjects = (matrix) => {
 		await gpuReadBuffer.mapAsync(GPUMapMode.READ);
 		const arrayBuffer = gpuReadBuffer.getMappedRange();
 		displayObjects(new Float32Array(arrayBuffer));
-	}, 16.67);
+	}, frameTime);
 
 })();
 
