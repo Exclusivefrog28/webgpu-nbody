@@ -3,20 +3,31 @@ const loadShader = async () => {
 	return await shaderCode.text()
 }
 
-const frameRate = 144;
-const frameTime = 1 / frameRate * 1000;
+const speed = 1;
+const bodyCount = 100;
+const radius = 300;
+const velocity = 0.05;
+const noiseFactor = 0.1;
 
 const display = document.getElementById("display");
-const objects = Array.from(display.children).slice(0, 2);
+const objects = [];
 
-objects.forEach((element) => {
-	element.style.transition = `transform ${frameTime}ms linear`
-})
+for (let i = 0; i < bodyCount; ++i) {
+	const newElement = document.createElement("div");
+	newElement.style.width = "8px";
+	newElement.style.height = "8px";
+	newElement.style.borderRadius = "4px";
+	newElement.style.backgroundColor = "white";
+	newElement.style.position = "absolute";
+
+	display.appendChild(newElement);
+	objects.push(newElement);
+}
 
 const displayObjects = (matrix) => {
-	
+
 	for (const [index, element] of objects.entries()) {
-		element.style.transform = `translate(${(matrix[index * 8] * 10).toFixed(0)}px, ${(matrix[index * 8 + 1] * 10).toFixed(0)}px)`;
+		element.style.transform = `translate(${(matrix[index * 8] * 1).toFixed(0)}px, ${(matrix[index * 8 + 1] * 1).toFixed(0)}px)`;
 	}
 }
 
@@ -27,11 +38,21 @@ const displayObjects = (matrix) => {
 	}
 	const device = await adapter.requestDevice();
 
+	let bodies = [];
+
+	for (let i = 0; i < bodyCount; ++i) {
+		const angle = ((2 * Math.PI) / bodyCount) * i;
+		const y = Math.cos(angle);
+		const x = Math.sin(angle);
+	
+		const randomOffsetX = (Math.random() - 1) * noiseFactor;
+		const randomOffsetY = (Math.random() - 1) * noiseFactor;
+
+		bodies = bodies.concat([radius * x, radius * y, -velocity * y + randomOffsetX, velocity * x + randomOffsetY, 0, 0, 10, 0]);
+	}
+
 	// First Matrix
-	const firstMatrix = new Float32Array([
-		0, 0, 0, 0.005, 0, 0, 1000, 0,
-		32, 0, 0, -5, 0, 0, 1, 0
-	]);
+	const firstMatrix = new Float32Array(bodies);
 
 	const gpuBufferFirstMatrix = device.createBuffer({
 		mappedAtCreation: true,
@@ -53,6 +74,15 @@ const displayObjects = (matrix) => {
 	new Float32Array(arrayBufferSecondMatrix).set(firstMatrix);
 	gpuBufferSecondMatrix.unmap();
 
+	// Deltatime
+
+	const params = new Float32Array([0]);
+
+	const gpuBufferParams = device.createBuffer({
+		size: params.byteLength,
+		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+	})
+
 
 	const shaderModule = device.createShaderModule({
 		code: await loadShader()
@@ -67,7 +97,7 @@ const displayObjects = (matrix) => {
 	});
 
 	const bindGroup = device.createBindGroup({
-		layout: computePipeline.getBindGroupLayout(0 /* index */),
+		layout: computePipeline.getBindGroupLayout(0),
 		entries: [
 			{
 				binding: 0,
@@ -80,11 +110,20 @@ const displayObjects = (matrix) => {
 				resource: {
 					buffer: gpuBufferSecondMatrix
 				}
+			},
+			{
+				binding: 2,
+				resource: {
+					buffer: gpuBufferParams
+				}
 			}
 		]
 	});
 
-	setInterval(async () => {
+	let timeStart = performance.now();
+
+	while (true) {
+
 		const commandEncoder = device.createCommandEncoder();
 
 		const passEncoder = commandEncoder.beginComputePass();
@@ -118,13 +157,17 @@ const displayObjects = (matrix) => {
 
 		// Submit GPU commands.
 		const gpuCommands = commandEncoder.finish();
+
+		let newTime = performance.now();
+		params[0] = (newTime - timeStart) * speed;
+		timeStart = newTime;
+		device.queue.writeBuffer(gpuBufferParams, 0, params);
 		device.queue.submit([gpuCommands]);
 
 		// Read buffer.
 		await gpuReadBuffer.mapAsync(GPUMapMode.READ);
 		const arrayBuffer = gpuReadBuffer.getMappedRange();
 		displayObjects(new Float32Array(arrayBuffer));
-	}, frameTime);
-
+	}
 })();
 

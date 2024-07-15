@@ -6,11 +6,15 @@ struct Body {
     padding: f32
 }
 
+struct Params {
+    deltaTime : f32
+}
+
 @group(0) @binding(0) var<storage, read> firstMatrix : array<Body>;
 @group(0) @binding(1) var<storage, read_write> secondMatrix : array<Body>;
+@group(0) @binding(2) var<uniform> params : Params;
 
-const gravConst = 1;
-const deltaTime = 0.1;
+const gravConst = 0.01;
 
 @compute @workgroup_size(8)
 
@@ -22,13 +26,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     let body = firstMatrix[global_id.x];
 
     let midVelocity = vec2(
-        body.velocity.x + 0.5 * body.acceleration.x * deltaTime,
-        body.velocity.y + 0.5 * body.acceleration.y * deltaTime
+        body.velocity.x + 0.5 * body.acceleration.x * params.deltaTime,
+        body.velocity.y + 0.5 * body.acceleration.y * params.deltaTime
     );
 
     let newPosition = vec2(
-        body.position.x + midVelocity.x * deltaTime,
-        body.position.y + midVelocity.y * deltaTime
+        body.position.x + midVelocity.x * params.deltaTime,
+        body.position.y + midVelocity.y * params.deltaTime
     );
 
     var newAcceleration = vec2(0.0, 0.0);
@@ -47,8 +51,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     }
 
     let newVelocity = vec2(
-        midVelocity.x + 0.5 * newAcceleration.x * deltaTime,
-        midVelocity.y + 0.5 * newAcceleration.y * deltaTime
+        midVelocity.x + 0.5 * newAcceleration.x * params.deltaTime,
+        midVelocity.y + 0.5 * newAcceleration.y * params.deltaTime
     );
 
     secondMatrix[global_id.x] = Body(newPosition, newVelocity, newAcceleration, body.mass, body.padding);
