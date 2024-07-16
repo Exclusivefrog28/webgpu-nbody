@@ -4,15 +4,28 @@ const loadShader = async () => {
 }
 
 const speed = 1;
-const bodyCount = 100;
-const radius = 300;
-const velocity = 0.05;
-const noiseFactor = 0.1;
+const bodyCount = 1000;
+const radius = 1000;
+const spread = 200;
+const velocity = 1.3;
+const velocityNoise = 0;
+const zoom = 0.3;
+const greatAttractorMass = 100000;
 
 const display = document.getElementById("display");
 const objects = [];
 
-for (let i = 0; i < bodyCount; ++i) {
+const greatAttractor = document.createElement("div");
+greatAttractor.style.width = "16px";
+greatAttractor.style.height = "16px";
+greatAttractor.style.borderRadius = "8px";
+greatAttractor.style.backgroundColor = "orange";
+greatAttractor.style.position = "absolute";
+
+display.appendChild(greatAttractor);
+objects.push(greatAttractor);
+
+for (let i = 1; i < bodyCount; ++i) {
 	const newElement = document.createElement("div");
 	newElement.style.width = "8px";
 	newElement.style.height = "8px";
@@ -27,7 +40,7 @@ for (let i = 0; i < bodyCount; ++i) {
 const displayObjects = (matrix) => {
 
 	for (const [index, element] of objects.entries()) {
-		element.style.transform = `translate(${(matrix[index * 8] * 1).toFixed(0)}px, ${(matrix[index * 8 + 1] * 1).toFixed(0)}px)`;
+		element.style.transform = `translate(${(matrix[index * 8] * zoom).toFixed(0)}px, ${(matrix[index * 8 + 1] * zoom).toFixed(0)}px)`;
 	}
 }
 
@@ -38,17 +51,19 @@ const displayObjects = (matrix) => {
 	}
 	const device = await adapter.requestDevice();
 
-	let bodies = [];
+	let bodies = [0, 0, 0, 0, 0, 0, greatAttractorMass, 0]; //a great attractor
 
-	for (let i = 0; i < bodyCount; ++i) {
-		const angle = ((2 * Math.PI) / bodyCount) * i;
+	for (let i = 1; i < bodyCount; ++i) {
+		const angle = (2 * Math.PI) * Math.random();
 		const y = Math.cos(angle);
 		const x = Math.sin(angle);
-	
-		const randomOffsetX = (Math.random() - 1) * noiseFactor;
-		const randomOffsetY = (Math.random() - 1) * noiseFactor;
 
-		bodies = bodies.concat([radius * x, radius * y, -velocity * y + randomOffsetX, velocity * x + randomOffsetY, 0, 0, 10, 0]);
+		const randomRadius = radius + (Math.random() - 1) * spread;
+
+		const velocityOffsetX = (Math.random() - 1) * velocityNoise;
+		const velocityOffsetY = (Math.random() - 1) * velocityNoise;
+
+		bodies = bodies.concat([randomRadius * x, randomRadius * y, -velocity * y + velocityOffsetX, velocity * x + velocityOffsetY, 0, 0, 10, 0]);
 	}
 
 	// First Matrix

@@ -43,7 +43,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
 
         let pathBetween = vec2(attractor.position.x - newPosition.x, attractor.position.y - newPosition.y);
         let direction = normalize(pathBetween);
-        let squaredDistance = pathBetween.x * pathBetween.x + pathBetween.y * pathBetween.y;
+        let squaredDistance = max(pathBetween.x * pathBetween.x + pathBetween.y * pathBetween.y, 100);
 
         let forceScalar = gravConst * ((body.mass * attractor.mass) / squaredDistance);
         let accelerationScalar = forceScalar / body.mass;
