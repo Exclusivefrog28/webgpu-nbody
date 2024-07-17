@@ -3,7 +3,7 @@ struct Body {
     velocity: vec2<f32>,
     acceleration: vec2<f32>,
     mass: f32,
-    padding: f32
+    energy: f32
 }
 
 struct Params {
@@ -55,5 +55,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
         midVelocity.y + 0.5 * newAcceleration.y * params.deltaTime
     );
 
-    secondMatrix[global_id.x] = Body(newPosition, newVelocity, newAcceleration, body.mass, body.padding);
+    let newEnergy = 0.5 * (newVelocity.x * newVelocity.x + newVelocity.y * newVelocity.y) * body.mass;
+
+    secondMatrix[global_id.x] = Body(newPosition, newVelocity, newAcceleration, body.mass, newEnergy);
 }

@@ -5,24 +5,26 @@ const loadShader = async () => {
 
 const speed = 1;
 const bodyCount = 1000;
-const radius = 1000;
-const spread = 200;
-const velocity = 1.3;
-const velocityNoise = 0;
+const radius = 1500;
+const spread = 500;
+const velocity = 2.5;
 const zoom = 0.3;
-const greatAttractorMass = 100000;
+const greatAttractorMass = 1000000;
 
-const display = document.getElementById("display");
+const displayElem = document.getElementById("display");
+const framerateElem = document.getElementById("framerate");
+const energyElem = document.getElementById("energy");
+
 const objects = [];
 
 const greatAttractor = document.createElement("div");
 greatAttractor.style.width = "16px";
 greatAttractor.style.height = "16px";
 greatAttractor.style.borderRadius = "8px";
-greatAttractor.style.backgroundColor = "orange";
+greatAttractor.style.backgroundColor = "aqua";
 greatAttractor.style.position = "absolute";
 
-display.appendChild(greatAttractor);
+displayElem.appendChild(greatAttractor);
 objects.push(greatAttractor);
 
 for (let i = 1; i < bodyCount; ++i) {
@@ -33,15 +35,23 @@ for (let i = 1; i < bodyCount; ++i) {
 	newElement.style.backgroundColor = "white";
 	newElement.style.position = "absolute";
 
-	display.appendChild(newElement);
+	displayElem.appendChild(newElement);
 	objects.push(newElement);
 }
 
 const displayObjects = (matrix) => {
+	let totalEnergy = 0;
 
 	for (const [index, element] of objects.entries()) {
+		totalEnergy += matrix[index * 8 + 7];
 		element.style.transform = `translate(${(matrix[index * 8] * zoom).toFixed(0)}px, ${(matrix[index * 8 + 1] * zoom).toFixed(0)}px)`;
 	}
+
+	energyElem.innerHTML = totalEnergy.toFixed(0);
+}
+
+const updateFramerate = (value) => {
+	framerateElem.innerHTML = value.toFixed(0);
 }
 
 (async () => {
@@ -51,7 +61,7 @@ const displayObjects = (matrix) => {
 	}
 	const device = await adapter.requestDevice();
 
-	let bodies = [0, 0, 0, 0, 0, 0, greatAttractorMass, 0]; //a great attractor
+	let bodies = [0, 0, 0, 0, 0, 0, greatAttractorMass, 0]; // a great attractor
 
 	for (let i = 1; i < bodyCount; ++i) {
 		const angle = (2 * Math.PI) * Math.random();
@@ -60,10 +70,11 @@ const displayObjects = (matrix) => {
 
 		const randomRadius = radius + (Math.random() - 1) * spread;
 
-		const velocityOffsetX = (Math.random() - 1) * velocityNoise;
-		const velocityOffsetY = (Math.random() - 1) * velocityNoise;
+		const velocityFactor = Math.sqrt(radius / randomRadius); // scale starting velocity based on distance
 
-		bodies = bodies.concat([randomRadius * x, randomRadius * y, -velocity * y + velocityOffsetX, velocity * x + velocityOffsetY, 0, 0, 10, 0]);
+		const energy = 5 * Math.pow(velocityFactor * velocity,2); // kinetic energy
+
+		bodies = bodies.concat([randomRadius * x, randomRadius * y, -velocity * y * velocityFactor, velocity * x * velocityFactor, 0, 0, 10, energy]);
 	}
 
 	// First Matrix
@@ -175,6 +186,7 @@ const displayObjects = (matrix) => {
 
 		let newTime = performance.now();
 		params[0] = (newTime - timeStart) * speed;
+		updateFramerate(1000 / params[0]);
 		timeStart = newTime;
 		device.queue.writeBuffer(gpuBufferParams, 0, params);
 		device.queue.submit([gpuCommands]);
