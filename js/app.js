@@ -3,7 +3,8 @@ const loadShader = async () => {
 	return await shaderCode.text()
 }
 
-const speed = 1;
+let running = true;
+let speed = 1;
 const bodyCount = 1000;
 const radius = 1500;
 const spread = 500;
@@ -14,6 +15,10 @@ const greatAttractorMass = 1000000;
 const displayElem = document.getElementById("display");
 const framerateElem = document.getElementById("framerate");
 const energyElem = document.getElementById("energy");
+const startBtn = document.getElementById("play");
+const stopBtn = document.getElementById("pause");
+const speedBtn = document.getElementById("speedBtn");
+const speedLabel = document.getElementById("speedLabel")
 
 const objects = [];
 
@@ -54,9 +59,21 @@ const updateFramerate = (value) => {
 	framerateElem.innerHTML = value.toFixed(0);
 }
 
+speedBtn.addEventListener("click", ()=>{
+	if (speed > 2) speed = 0.5;
+	else speed += 0.5;
+
+	speedLabel.innerHTML = `${speed.toFixed(1)}x`;
+});
+
 (async () => {
+	if (!navigator.gpu) {
+		console.log("WebGPU not supported on this browser.");
+		return;
+	}
 	const adapter = await navigator.gpu.requestAdapter();
 	if (!adapter) {
+		console.log("No appropriate GPUAdapter found.");
 		return;
 	}
 	const device = await adapter.requestDevice();
@@ -72,39 +89,35 @@ const updateFramerate = (value) => {
 
 		const velocityFactor = Math.sqrt(radius / randomRadius); // scale starting velocity based on distance
 
-		const energy = 5 * Math.pow(velocityFactor * velocity,2); // kinetic energy
+		const energy = 5 * Math.pow(velocityFactor * velocity, 2); // kinetic energy
 
 		bodies = bodies.concat([randomRadius * x, randomRadius * y, -velocity * y * velocityFactor, velocity * x * velocityFactor, 0, 0, 10, energy]);
 	}
 
-	// First Matrix
-	const firstMatrix = new Float32Array(bodies);
 
-	const gpuBufferFirstMatrix = device.createBuffer({
+	const input = new Float32Array(bodies);
+
+	const inputBuffer = device.createBuffer({
 		mappedAtCreation: true,
-		size: firstMatrix.byteLength,
+		size: input.byteLength,
 		usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
 	});
-	const arrayBufferFirstMatrix = gpuBufferFirstMatrix.getMappedRange();
-	new Float32Array(arrayBufferFirstMatrix).set(firstMatrix);
-	gpuBufferFirstMatrix.unmap();
+	const inputArrayBuffer = inputBuffer.getMappedRange();
+	new Float32Array(inputArrayBuffer).set(input);
+	inputBuffer.unmap();
 
-
-	// Second Matrix
-	const gpuBufferSecondMatrix = device.createBuffer({
+	const outputBuffer = device.createBuffer({
 		mappedAtCreation: true,
-		size: firstMatrix.byteLength,
+		size: input.byteLength,
 		usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
 	});
-	const arrayBufferSecondMatrix = gpuBufferSecondMatrix.getMappedRange();
-	new Float32Array(arrayBufferSecondMatrix).set(firstMatrix);
-	gpuBufferSecondMatrix.unmap();
+	const outputArrayBuffer = outputBuffer.getMappedRange();
+	new Float32Array(outputArrayBuffer).set(input);
+	outputBuffer.unmap();
 
-	// Deltatime
 
 	const params = new Float32Array([0]);
-
-	const gpuBufferParams = device.createBuffer({
+	const paramsBuffer = device.createBuffer({
 		size: params.byteLength,
 		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 	})
@@ -128,73 +141,84 @@ const updateFramerate = (value) => {
 			{
 				binding: 0,
 				resource: {
-					buffer: gpuBufferFirstMatrix
+					buffer: inputBuffer
 				}
 			},
 			{
 				binding: 1,
 				resource: {
-					buffer: gpuBufferSecondMatrix
+					buffer: outputBuffer
 				}
 			},
 			{
 				binding: 2,
 				resource: {
-					buffer: gpuBufferParams
+					buffer: paramsBuffer
 				}
 			}
 		]
 	});
 
-	let timeStart = performance.now();
+	
 
-	while (true) {
+	const startSimulation = async () => {
 
-		const commandEncoder = device.createCommandEncoder();
+		let timeStart = performance.now();
+		while (running) {
+			const commandEncoder = device.createCommandEncoder();
+	
+			const passEncoder = commandEncoder.beginComputePass();
+			passEncoder.setPipeline(computePipeline);
+			passEncoder.setBindGroup(0, bindGroup);
+			const workgroupCount = Math.ceil((input.length / 8) / 8);
+			passEncoder.dispatchWorkgroups(workgroupCount);
+			passEncoder.end();
+	
+			const readBuffer = device.createBuffer({
+				size: input.byteLength,
+				usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+			});
+	
+			commandEncoder.copyBufferToBuffer(
+				outputBuffer, 0,
+				inputBuffer, 0,
+				input.byteLength
+			);
+			commandEncoder.copyBufferToBuffer(
+				outputBuffer, 0,
+				readBuffer, 0,
+				input.byteLength
+			);
+	
+			const gpuCommands = commandEncoder.finish();
+	
+			let newTime = performance.now();
+			params[0] = (newTime - timeStart) * speed;
+			updateFramerate(1000 / params[0]);
+			timeStart = newTime;
+			device.queue.writeBuffer(paramsBuffer, 0, params);
+			device.queue.submit([gpuCommands]);
+	
+			await readBuffer.mapAsync(GPUMapMode.READ);
+			const arrayBuffer = readBuffer.getMappedRange();
+			displayObjects(new Float32Array(arrayBuffer));
+		}
+	};
 
-		const passEncoder = commandEncoder.beginComputePass();
-		passEncoder.setPipeline(computePipeline);
-		passEncoder.setBindGroup(0, bindGroup);
-		const workgroupCount = Math.ceil((firstMatrix.length / 8) / 8);
-		passEncoder.dispatchWorkgroups(workgroupCount);
-		passEncoder.end();
+	startSimulation();
 
-		// Get a GPU buffer for reading in an unmapped state.
-		const gpuReadBuffer = device.createBuffer({
-			size: firstMatrix.byteLength,
-			usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-		});
+	startBtn.addEventListener("click", ()=>{
+		if (!running){
+			running = true;
+			startSimulation();
+		}
+	});
 
-		// Encode commands for copying buffer to buffer.
-		commandEncoder.copyBufferToBuffer(
-			gpuBufferSecondMatrix /* source buffer */,
-			0 /* source offset */,
-			gpuBufferFirstMatrix /* destination buffer */,
-			0 /* destination offset */,
-			firstMatrix.byteLength /* size */
-		);
-		commandEncoder.copyBufferToBuffer(
-			gpuBufferSecondMatrix /* source buffer */,
-			0 /* source offset */,
-			gpuReadBuffer /* destination buffer */,
-			0 /* destination offset */,
-			firstMatrix.byteLength /* size */
-		);
-
-		// Submit GPU commands.
-		const gpuCommands = commandEncoder.finish();
-
-		let newTime = performance.now();
-		params[0] = (newTime - timeStart) * speed;
-		updateFramerate(1000 / params[0]);
-		timeStart = newTime;
-		device.queue.writeBuffer(gpuBufferParams, 0, params);
-		device.queue.submit([gpuCommands]);
-
-		// Read buffer.
-		await gpuReadBuffer.mapAsync(GPUMapMode.READ);
-		const arrayBuffer = gpuReadBuffer.getMappedRange();
-		displayObjects(new Float32Array(arrayBuffer));
-	}
+	stopBtn.addEventListener("click", ()=>{
+		if (running){
+			running = false;
+		}
+	});
+	
 })();
 
