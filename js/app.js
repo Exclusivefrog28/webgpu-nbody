@@ -122,6 +122,14 @@ speedBtn.addEventListener("click", ()=>{
 		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 	})
 
+	const readBuffer = device.createBuffer({
+		mappedAtCreation: true,
+		size: input.byteLength,
+		usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+	});
+	const readArrayBuffer = readBuffer.getMappedRange();
+	new Float32Array(readArrayBuffer).set(input);
+	readBuffer.unmap();
 
 	const shaderModule = device.createShaderModule({
 		code: await loadShader()
@@ -164,21 +172,30 @@ speedBtn.addEventListener("click", ()=>{
 	const startSimulation = async () => {
 
 		let timeStart = performance.now();
-		while (running) {
+
+		while(running){
+			let newTime = performance.now();
+			const frameTime = (newTime - timeStart) * speed;
+			params[0] = frameTime;
+			updateFramerate(1000 / frameTime);
+			timeStart = newTime;
+
+			await readBuffer.mapAsync(GPUMapMode.READ);
+			const arrayBuffer = readBuffer.getMappedRange();
+			displayObjects(new Float32Array(arrayBuffer));
+			readBuffer.unmap();
+
 			const commandEncoder = device.createCommandEncoder();
-	
 			const passEncoder = commandEncoder.beginComputePass();
 			passEncoder.setPipeline(computePipeline);
 			passEncoder.setBindGroup(0, bindGroup);
 			const workgroupCount = Math.ceil((input.length / 8) / 8);
 			passEncoder.dispatchWorkgroups(workgroupCount);
+
+			device.queue.writeBuffer(paramsBuffer, 0, params);
+
 			passEncoder.end();
-	
-			const readBuffer = device.createBuffer({
-				size: input.byteLength,
-				usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-			});
-	
+
 			commandEncoder.copyBufferToBuffer(
 				outputBuffer, 0,
 				inputBuffer, 0,
@@ -192,16 +209,7 @@ speedBtn.addEventListener("click", ()=>{
 	
 			const gpuCommands = commandEncoder.finish();
 	
-			let newTime = performance.now();
-			params[0] = (newTime - timeStart) * speed;
-			updateFramerate(1000 / params[0]);
-			timeStart = newTime;
-			device.queue.writeBuffer(paramsBuffer, 0, params);
 			device.queue.submit([gpuCommands]);
-	
-			await readBuffer.mapAsync(GPUMapMode.READ);
-			const arrayBuffer = readBuffer.getMappedRange();
-			displayObjects(new Float32Array(arrayBuffer));
 		}
 	};
 
