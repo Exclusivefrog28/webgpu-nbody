@@ -16,7 +16,7 @@ struct Params {
 
 const gravConst = 0.01;
 
-@compute @workgroup_size(8)
+@compute @workgroup_size(32)
 
 fn main(@builtin(global_invocation_id) global_id: vec3u) {
     if global_id.x >= u32(arrayLength(&firstMatrix)) {

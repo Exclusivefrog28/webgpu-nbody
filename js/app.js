@@ -5,11 +5,11 @@ const loadShader = async () => {
 
 let running = true;
 let speed = 1;
+let zoom = 0.3;
 const bodyCount = 1000;
 const radius = 1500;
 const spread = 500;
 const velocity = 2.5;
-const zoom = 0.3;
 const greatAttractorMass = 1000000;
 
 const displayElem = document.getElementById("display");
@@ -55,16 +55,53 @@ const displayObjects = (matrix) => {
 	energyElem.innerHTML = totalEnergy.toFixed(0);
 }
 
+let bodies = [0, 0, 0, 0, 0, 0, greatAttractorMass, 0]; // a great attractor
+
+for (let i = 1; i < bodyCount; ++i) {
+	const angle = (2 * Math.PI) * Math.random();
+	const y = Math.cos(angle);
+	const x = Math.sin(angle);
+
+	const randomRadius = radius + (Math.random() - 1) * spread;
+
+	const velocityFactor = Math.sqrt(radius / randomRadius); // scale starting velocity based on distance
+
+	const energy = 5 * Math.pow(velocityFactor * velocity, 2); // kinetic energy
+
+	bodies = bodies.concat([randomRadius * x, randomRadius * y, -velocity * y * velocityFactor, velocity * x * velocityFactor, 0, 0, 10, energy]);
+}
+
 const updateFramerate = (value) => {
 	framerateElem.innerHTML = value.toFixed(0);
 }
 
-speedBtn.addEventListener("click", ()=>{
+speedBtn.addEventListener("click", () => {
 	if (speed > 2) speed = 0.5;
 	else speed += 0.5;
 
 	speedLabel.innerHTML = `${speed.toFixed(1)}x`;
 });
+
+document.addEventListener("wheel", (event) => {
+	event.preventDefault();
+	zoom *= (-event.deltaY / 1000) + 1;
+});
+
+let hypo = undefined;
+document.addEventListener('touchmove', (event) => {
+	event.preventDefault();
+	if (event.touches.length === 2) {
+		let hypo1 = Math.hypot((event.touches[0].pageX - event.touches[1].pageX),
+			(event.touches[0].pageY - event.touches[1].pageY));
+		if (hypo === undefined) {
+			hypo = hypo1;
+		}
+		zoom *= ((hypo1 / hypo - 1) * 0.5) + 1;
+	}
+}, false);
+document.addEventListener('touchend', (event) => {
+	hypo = undefined;
+}, false);
 
 (async () => {
 	if (!navigator.gpu) {
@@ -77,23 +114,6 @@ speedBtn.addEventListener("click", ()=>{
 		return;
 	}
 	const device = await adapter.requestDevice();
-
-	let bodies = [0, 0, 0, 0, 0, 0, greatAttractorMass, 0]; // a great attractor
-
-	for (let i = 1; i < bodyCount; ++i) {
-		const angle = (2 * Math.PI) * Math.random();
-		const y = Math.cos(angle);
-		const x = Math.sin(angle);
-
-		const randomRadius = radius + (Math.random() - 1) * spread;
-
-		const velocityFactor = Math.sqrt(radius / randomRadius); // scale starting velocity based on distance
-
-		const energy = 5 * Math.pow(velocityFactor * velocity, 2); // kinetic energy
-
-		bodies = bodies.concat([randomRadius * x, randomRadius * y, -velocity * y * velocityFactor, velocity * x * velocityFactor, 0, 0, 10, energy]);
-	}
-
 
 	const input = new Float32Array(bodies);
 
@@ -167,13 +187,13 @@ speedBtn.addEventListener("click", ()=>{
 		]
 	});
 
-	
+
 
 	const startSimulation = async () => {
 
 		let timeStart = performance.now();
 
-		while(running){
+		while (running) {
 			let newTime = performance.now();
 			const frameTime = (newTime - timeStart) * speed;
 			params[0] = frameTime;
@@ -189,7 +209,7 @@ speedBtn.addEventListener("click", ()=>{
 			const passEncoder = commandEncoder.beginComputePass();
 			passEncoder.setPipeline(computePipeline);
 			passEncoder.setBindGroup(0, bindGroup);
-			const workgroupCount = Math.ceil((input.length / 8) / 8);
+			const workgroupCount = Math.ceil((input.length / 8) / 32);
 			passEncoder.dispatchWorkgroups(workgroupCount);
 
 			device.queue.writeBuffer(paramsBuffer, 0, params);
@@ -206,27 +226,27 @@ speedBtn.addEventListener("click", ()=>{
 				readBuffer, 0,
 				input.byteLength
 			);
-	
+
 			const gpuCommands = commandEncoder.finish();
-	
+
 			device.queue.submit([gpuCommands]);
 		}
 	};
 
 	startSimulation();
 
-	startBtn.addEventListener("click", ()=>{
-		if (!running){
+	startBtn.addEventListener("click", () => {
+		if (!running) {
 			running = true;
 			startSimulation();
 		}
 	});
 
-	stopBtn.addEventListener("click", ()=>{
-		if (running){
+	stopBtn.addEventListener("click", () => {
+		if (running) {
 			running = false;
 		}
 	});
-	
+
 })();
 
