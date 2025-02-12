@@ -7,23 +7,23 @@ struct Body {
 }
 
 struct Params {
-    deltaTime : f32
+    deltaTime : f32,
+    zoom: f32
 }
 
-@group(0) @binding(0) var<storage, read> firstMatrix : array<Body>;
-@group(0) @binding(1) var<storage, read_write> secondMatrix : array<Body>;
-@group(0) @binding(2) var<uniform> params : Params;
+@group(0) @binding(0) var<uniform> params : Params;
+@group(1) @binding(0) var<storage, read_write> bodiesA : array<Body>;
+@group(1) @binding(1) var<storage, read_write> bodiesB : array<Body>;
 
 const gravConst = 0.01;
 
-@compute @workgroup_size(32)
-
+@compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3u) {
-    if global_id.x >= u32(arrayLength(&firstMatrix)) {
+    if global_id.x >= u32(arrayLength(&bodiesA)) {
         return;
     }
 
-    let body = firstMatrix[global_id.x];
+    let body = bodiesA[global_id.x];
 
     let midVelocity = vec2(
         body.velocity.x + 0.5 * body.acceleration.x * params.deltaTime,
@@ -37,9 +37,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
 
     var newAcceleration = vec2(0.0, 0.0);
 
-    for (var i = 0u; i < arrayLength(&firstMatrix); i = i + 1) {
+    for (var i = 0u; i < arrayLength(&bodiesA); i = i + 1) {
         if i == global_id.x {continue;}
-        let attractor = firstMatrix[i];
+        let attractor = bodiesA[i];
 
         let pathBetween = vec2(attractor.position.x - newPosition.x, attractor.position.y - newPosition.y);
         let direction = normalize(pathBetween);
@@ -57,5 +57,5 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
 
     let newEnergy = 0.5 * (newVelocity.x * newVelocity.x + newVelocity.y * newVelocity.y) * body.mass;
 
-    secondMatrix[global_id.x] = Body(newPosition, newVelocity, newAcceleration, body.mass, newEnergy);
+    bodiesB[global_id.x] = Body(newPosition, newVelocity, newAcceleration, body.mass, newEnergy);
 }
