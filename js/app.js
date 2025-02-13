@@ -5,7 +5,7 @@ const loadShader = async (name) => {
 
 let running = true;
 let speed = 1;
-let zoom = 0.3;
+let zoom = 0.01;
 const bodyCount = 1000;
 const radius = 1500;
 const spread = 500;
@@ -73,7 +73,7 @@ document.addEventListener('touchmove', (event) => {
         zoom *= ((hypo1 / hypo - 1) * 0.5) + 1;
     }
 }, false);
-document.addEventListener('touchend', (event) => {
+document.addEventListener('touchend', () => {
     hypo = undefined;
 }, false);
 
