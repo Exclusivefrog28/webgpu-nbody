@@ -5,7 +5,7 @@ const loadShader = async (name) => {
 
 let running = true;
 let speed = 1;
-let zoom = 0.01;
+let zoom = 0.0005;
 const bodyCount = 1000;
 const radius = 1500;
 const spread = 500;
@@ -198,8 +198,12 @@ document.addEventListener('touchend', () => {
     });
 
     const vertexBufferData = new Float32Array([
-        -0.01, -0.02, 0.01,
-        -0.02, 0.0, 0.02
+        1, 0, 0.5, 0.866, 0, 0,
+        0.5, 0.866, -0.5, 0.866, 0, 0,
+        -0.5, 0.866, -1, 0, 0, 0,
+        -1, 0, -0.5, -0.866, 0, 0,
+        -0.5, -0.866, 0.5, -0.866, 0, 0,
+        0.5, -0.866, 1, 0, 0, 0
     ]);
     const vertexBuffer = device.createBuffer({
         size: vertexBufferData.byteLength,
@@ -306,14 +310,14 @@ document.addEventListener('touchend', () => {
             renderPass.setVertexBuffer(0, particleBuffers[(t + 1) % 2]);
             renderPass.setVertexBuffer(1, vertexBuffer);
             renderPass.setBindGroup(0, paramsBindGroup);
-            renderPass.draw(3, bodyCount, 0, 0);
+            renderPass.draw(vertexBufferData.length / 2, bodyCount, 0, 0);
 
             renderPass.end();
 
             const gpuCommands = commandEncoder.finish();
 
             device.queue.submit([gpuCommands]);
-            await new Promise(resolve => setTimeout(resolve, 1));
+            await new Promise(resolve => setTimeout(resolve, 16));
 
 
             ++t;
