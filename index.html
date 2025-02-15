@@ -16,18 +16,18 @@
               rounded-tr-xl
               p-4 bg-black/80 text-white font-mono text-lg ">
     <div class="flex flex-row justify-between gap-4">
-      <p>Simulation Frequency</p>
-      <p><b id="framerate">0</b> Hz</p>
+      <p>framerate</p>
+      <p><b id="framerate">0</b> FPS</p>
     </div>
   </div>
   <div class="absolute bottom-4 left-1/2 -translate-x-1/2 z-20
             bg-black/80 rounded-lg px-4 py-1
               flex flex-row items-center justify-center gap-4">
-    <button id="play" class="opacity-80 hover:opacity-100 hover:scale-125 transition-all"><img src="assets/play.svg"
+    <button id="play" class="opacity-80 hover:opacity-100 hover:scale-125 transition-all flex-1 px-1"><img src="assets/play.svg"
         class="w-12 h-12" /></button>
-    <button id="pause" class="opacity-80 hover:opacity-100 hover:scale-125 transition-all"><img src="assets/pause.svg"
+    <button id="pause" class="opacity-80 hover:opacity-100 hover:scale-125 transition-all flex-1 px-1"><img src="assets/pause.svg"
         class="w-12 h-12" /></button>
-    <button id="speedBtn" class="opacity-80 hover:opacity-100 hover:scale-125 transition-all flex flex-row items-center">
+    <button id="speedBtn" class="opacity-80 hover:opacity-100 hover:scale-125 transition-all flex-1 flex flex-row items-center px-1">
       <p id="speedLabel" class="text-2xl font-mono text-white w-12 text-center">1.0x</p>
     </button>
   </div>

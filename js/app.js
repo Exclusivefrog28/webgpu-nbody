@@ -1,3 +1,5 @@
+import { getVertices } from './circle.js';
+
 const loadShader = async (name) => {
     let shaderCode = await fetch(`shader/${name}.wgsl`);
     return await shaderCode.text()
@@ -11,6 +13,8 @@ const radius = 1500;
 const spread = 500;
 const velocity = 2.5;
 const greatAttractorMass = 1000000;
+
+const polygonPoints = 16;
 
 const canvas = document.getElementById("canvas");
 const framerateElem = document.getElementById("framerate");
@@ -80,16 +84,16 @@ addEventListener('resize', () => {
 }, false);
 
 (async () => {
-	if (!navigator.gpu) {
-		console.log("WebGPU not supported on this browser.");
-		return;
-	}
-	const adapter = await navigator.gpu.requestAdapter();
-	if (!adapter) {
-		console.log("No appropriate GPUAdapter found.");
-		return;
-	}
-	const device = await adapter.requestDevice();
+    if (!navigator.gpu) {
+        console.log("WebGPU not supported on this browser.");
+        return;
+    }
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) {
+        console.log("No appropriate GPUAdapter found.");
+        return;
+    }
+    const device = await adapter.requestDevice();
 
     const ctx = canvas.getContext("webgpu");
     const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
@@ -111,12 +115,12 @@ addEventListener('resize', () => {
             {
                 binding: 0,
                 visibility: GPUShaderStage.COMPUTE,
-                buffer: {type: 'storage'}
+                buffer: { type: 'storage' }
             },
             {
                 binding: 1,
                 visibility: GPUShaderStage.COMPUTE,
-                buffer: {type: 'storage'}
+                buffer: { type: 'storage' }
             }
         ]
     });
@@ -126,7 +130,7 @@ addEventListener('resize', () => {
             {
                 binding: 0,
                 visibility: GPUShaderStage.COMPUTE | GPUShaderStage.VERTEX,
-                buffer: {type: 'uniform'}
+                buffer: { type: 'uniform' }
             }
         ]
     });
@@ -194,18 +198,11 @@ addEventListener('resize', () => {
         }
     });
 
-    const vertexBufferData = new Float32Array([
-        1, 0, 0.5, 0.866, 0, 0,
-        0.5, 0.866, -0.5, 0.866, 0, 0,
-        -0.5, 0.866, -1, 0, 0, 0,
-        -1, 0, -0.5, -0.866, 0, 0,
-        -0.5, -0.866, 0.5, -0.866, 0, 0,
-        0.5, -0.866, 1, 0, 0, 0
-    ]);
+    const vertexBufferData = new Float32Array(getVertices(polygonPoints));
     const vertexBuffer = device.createBuffer({
         size: vertexBufferData.byteLength,
         usage: GPUBufferUsage.VERTEX,
-        mappedAtCreation : true
+        mappedAtCreation: true
     })
     new Float32Array(vertexBuffer.getMappedRange()).set(vertexBufferData);
     vertexBuffer.unmap();
@@ -272,65 +269,60 @@ addEventListener('resize', () => {
         device.queue.writeBuffer(paramsBuffer, 0, new Float32Array([deltaTime, zoom, canvas.width / canvas.height]));
     }
 
-   
-    const startSimulation = async () => {
+    let t = 0;
+    let deltaTime = 0;
+    let lastFrameTime = performance.now();
 
-        let t = 0;
-        let deltaTime = 0;
-        let lastFrameTime = performance.now();
-        
-        const iteration = async () => {
-            const startTime = performance.now();
-            updateFramerate(1000 / (startTime - lastFrameTime));
-            lastFrameTime = startTime;
-            updateParams(deltaTime * speed);
+    const iteration = async () => {
+        const startTime = performance.now();
+        updateFramerate(1000 / (startTime - lastFrameTime));
+        lastFrameTime = startTime;
+        updateParams(deltaTime * speed);
 
-            const commandEncoder = device.createCommandEncoder();
+        const commandEncoder = device.createCommandEncoder();
+
+        if (running) {
             const computePass = commandEncoder.beginComputePass();
             computePass.setPipeline(computePipeline);
             computePass.setBindGroup(0, paramsBindGroup);
             computePass.setBindGroup(1, particleBindGroups[t % 2]);
             computePass.dispatchWorkgroups(Math.ceil(bodyCount / 64));
-
             computePass.end();
+        }
 
-            const renderPass = commandEncoder.beginRenderPass({
-                colorAttachments: [{
-                    view: ctx.getCurrentTexture().createView(),
-                    loadOp: "clear",
-                    storeOp: "store",
-                    clearValue: {r: 0.051, g: 0.067, b: 0.09, a: 1}
-                }]
-            });
+        const renderPass = commandEncoder.beginRenderPass({
+            colorAttachments: [{
+                view: ctx.getCurrentTexture().createView(),
+                loadOp: "clear",
+                storeOp: "store",
+                clearValue: { r: 0.051, g: 0.067, b: 0.09, a: 1 }
+            }]
+        });
 
-            renderPass.setPipeline(renderPipeline);
-            renderPass.setVertexBuffer(0, particleBuffers[(t + 1) % 2]);
-            renderPass.setVertexBuffer(1, vertexBuffer);
-            renderPass.setBindGroup(0, paramsBindGroup);
-            renderPass.draw(vertexBufferData.length / 2, bodyCount, 0, 0);
+        renderPass.setPipeline(renderPipeline);
+        renderPass.setVertexBuffer(0, particleBuffers[(t + 1) % 2]);
+        renderPass.setVertexBuffer(1, vertexBuffer);
+        renderPass.setBindGroup(0, paramsBindGroup);
+        renderPass.draw(vertexBufferData.length / 2, bodyCount, 0, 0);
 
-            renderPass.end();
+        renderPass.end();
 
-            const gpuCommands = commandEncoder.finish();
+        const gpuCommands = commandEncoder.finish();
 
-            device.queue.submit([gpuCommands]);
-            await device.queue.onSubmittedWorkDone();
+        device.queue.submit([gpuCommands]);
+        await device.queue.onSubmittedWorkDone();
 
-            deltaTime = performance.now() - startTime;
-            
-            ++t;
-            if (running) requestAnimationFrame(iteration);
-        };
+        deltaTime = performance.now() - startTime;
 
+        if (running) ++t;
         requestAnimationFrame(iteration);
     };
 
-    startSimulation();
+    requestAnimationFrame(iteration);
 
     startBtn.addEventListener("click", () => {
         if (!running) {
             running = true;
-            startSimulation();
         }
     });
 

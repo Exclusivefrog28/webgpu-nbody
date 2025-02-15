@@ -25,7 +25,7 @@ fn vertexMain (
     output.position.y = output.position.y * params.aspectRatio;
 
     let velocity = a_particleVel.x * a_particleVel.x + a_particleVel.y * a_particleVel.y;
-    output.color = vec4f(min(0.05 * velocity ,1), 0.5, 0.5, 1.0);
+    output.color = vec4f(min(0.04 * velocity ,1), 0.5, 0.5, 1.0);
 
     return output;
 }
