@@ -14,7 +14,6 @@ const greatAttractorMass = 1000000;
 
 const canvas = document.getElementById("canvas");
 const framerateElem = document.getElementById("framerate");
-const energyElem = document.getElementById("energy");
 const startBtn = document.getElementById("play");
 const stopBtn = document.getElementById("pause");
 const speedBtn = document.getElementById("speedBtn");
@@ -41,9 +40,7 @@ for (let i = 1; i < bodyCount; ++i) {
 
     const velocityFactor = Math.sqrt(radius / randomRadius); // scale starting velocity based on distance
 
-    const energy = 5 * Math.pow(velocityFactor * velocity, 2); // kinetic energy
-
-    bodies = bodies.concat([randomRadius * x, randomRadius * y, -velocity * y * velocityFactor, velocity * x * velocityFactor, 0, 0, 10, energy]);
+    bodies = bodies.concat([randomRadius * x, randomRadius * y, -velocity * y * velocityFactor, velocity * x * velocityFactor, 0, 0, 10, 0]);
 }
 
 const updateFramerate = (value) => {
@@ -75,6 +72,11 @@ document.addEventListener('touchmove', (event) => {
 }, false);
 document.addEventListener('touchend', () => {
     hypo = undefined;
+}, false);
+
+addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 }, false);
 
 (async () => {
@@ -152,18 +154,15 @@ document.addEventListener('touchend', () => {
             entryPoint: "vertexMain",
             buffers: [
                 {
-                    // instanced particles buffer
                     arrayStride: 8 * 4,
                     stepMode: 'instance',
                     attributes: [
                         {
-                            // instance position
                             shaderLocation: 0,
                             offset: 0,
                             format: 'float32x2',
                         },
                         {
-                            // instance velocity
                             shaderLocation: 1,
                             offset: 2 * 4,
                             format: 'float32x2',
@@ -171,12 +170,10 @@ document.addEventListener('touchend', () => {
                     ],
                 },
                 {
-                    // vertex buffer
                     arrayStride: 2 * 4,
                     stepMode: 'vertex',
                     attributes: [
                         {
-                            // vertex positions
                             shaderLocation: 2,
                             offset: 0,
                             format: 'float32x2',
@@ -213,7 +210,7 @@ document.addEventListener('touchend', () => {
     new Float32Array(vertexBuffer.getMappedRange()).set(vertexBufferData);
     vertexBuffer.unmap();
 
-    const paramCount = 2;
+    const paramCount = 3;
     const paramsBuffer = device.createBuffer({
         size: paramCount * Float32Array.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -272,21 +269,21 @@ document.addEventListener('touchend', () => {
     });
 
     const updateParams = (deltaTime) => {
-        device.queue.writeBuffer(paramsBuffer, 0, new Float32Array([deltaTime, zoom]));
+        device.queue.writeBuffer(paramsBuffer, 0, new Float32Array([deltaTime, zoom, canvas.width / canvas.height]));
     }
 
-    let t = 0;
+   
     const startSimulation = async () => {
 
-        let timeStart = performance.now();
-
-        while (running) {
-            let newTime = performance.now();
-            const frameTime = (newTime - timeStart) * speed;
-            updateFramerate(1000 / frameTime);
-            updateParams(frameTime);
-
-            timeStart = newTime;
+        let t = 0;
+        let deltaTime = 0;
+        let lastFrameTime = performance.now();
+        
+        const iteration = async () => {
+            const startTime = performance.now();
+            updateFramerate(1000 / (startTime - lastFrameTime));
+            lastFrameTime = startTime;
+            updateParams(deltaTime * speed);
 
             const commandEncoder = device.createCommandEncoder();
             const computePass = commandEncoder.beginComputePass();
@@ -317,11 +314,15 @@ document.addEventListener('touchend', () => {
             const gpuCommands = commandEncoder.finish();
 
             device.queue.submit([gpuCommands]);
-            await new Promise(resolve => setTimeout(resolve, 16));
+            await device.queue.onSubmittedWorkDone();
 
-
+            deltaTime = performance.now() - startTime;
+            
             ++t;
-        }
+            if (running) requestAnimationFrame(iteration);
+        };
+
+        requestAnimationFrame(iteration);
     };
 
     startSimulation();

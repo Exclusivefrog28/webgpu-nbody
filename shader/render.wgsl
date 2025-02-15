@@ -1,6 +1,7 @@
 struct Params {
     deltaTime : f32,
-    zoom: f32
+    zoom: f32,
+    aspectRatio: f32
 }
 
 struct VertexOutput {
@@ -21,6 +22,7 @@ fn vertexMain (
 
     var output : VertexOutput;
     output.position = vec4(pos + a_particlePos * params.zoom, 0.0, 1.0);
+    output.position.y = output.position.y * params.aspectRatio;
 
     let velocity = a_particleVel.x * a_particleVel.x + a_particleVel.y * a_particleVel.y;
     output.color = vec4f(min(0.05 * velocity ,1), 0.5, 0.5, 1.0);

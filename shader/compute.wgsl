@@ -2,13 +2,13 @@ struct Body {
     position: vec2<f32>,
     velocity: vec2<f32>,
     acceleration: vec2<f32>,
-    mass: f32,
-    energy: f32
+    mass: f32
 }
 
 struct Params {
     deltaTime : f32,
-    zoom: f32
+    zoom: f32,
+    aspectRatio: f32
 }
 
 @group(0) @binding(0) var<uniform> params : Params;
@@ -55,7 +55,5 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
         midVelocity.y + 0.5 * newAcceleration.y * params.deltaTime
     );
 
-    let newEnergy = 0.5 * (newVelocity.x * newVelocity.x + newVelocity.y * newVelocity.y) * body.mass;
-
-    bodiesB[global_id.x] = Body(newPosition, newVelocity, newAcceleration, body.mass, newEnergy);
+    bodiesB[global_id.x] = Body(newPosition, newVelocity, newAcceleration, body.mass);
 }
