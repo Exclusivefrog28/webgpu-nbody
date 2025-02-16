@@ -18,6 +18,8 @@ const polygonPoints = 16;
 
 const canvas = document.getElementById("canvas");
 const framerateElem = document.getElementById("framerate");
+const computeTimeElem = document.getElementById("computetime");
+const renderTimeElem = document.getElementById("rendertime");
 const startBtn = document.getElementById("play");
 const stopBtn = document.getElementById("pause");
 const speedBtn = document.getElementById("speedBtn");
@@ -47,9 +49,47 @@ for (let i = 1; i < bodyCount; ++i) {
     bodies = bodies.concat([randomRadius * x, randomRadius * y, -velocity * y * velocityFactor, velocity * x * velocityFactor, 0, 0, 10, 0]);
 }
 
+let frameTimeSum = 0;
+let frameTimerSamples = 0
+const frameTimerSamplesPerUpdate = 5;
 const updateFramerate = (value) => {
-    framerateElem.innerHTML = value.toFixed(0);
+    frameTimeSum += value;
+    frameTimerSamples++;
+
+    if (frameTimerSamples >= frameTimerSamplesPerUpdate) {
+        framerateElem.innerHTML = Math.round(1000 / (frameTimeSum / frameTimerSamples));
+        frameTimeSum = 0;
+        frameTimerSamples = 0;
+    }
 }
+
+let computePassDurationSum = 0;
+let renderPassDurationSum = 0;
+let timerSamples = 0;
+const timerSamplesPerUpdate = 5;
+const updatePassTimes = (computePassDuration, renderPassDuration) => {
+    if (computePassDuration > 0 && renderPassDuration > 0) {
+        computePassDurationSum += computePassDuration;
+        renderPassDurationSum += renderPassDuration;
+        timerSamples++;
+    }
+
+    if (timerSamples >= timerSamplesPerUpdate) {
+        const avgComputeMicroseconds = Math.round(
+            computePassDurationSum / timerSamples / 1000
+        );
+        const avgRenderMicroseconds = Math.round(
+            renderPassDurationSum / timerSamples / 1000
+        );
+
+        computeTimeElem.innerHTML = avgComputeMicroseconds;
+        renderTimeElem.innerHTML = avgRenderMicroseconds;
+
+        computePassDurationSum = 0;
+        renderPassDurationSum = 0;
+        timerSamples = 0;
+    }
+};
 
 speedBtn.addEventListener("click", () => {
     if (speed > 2) speed = 0.5;
@@ -93,7 +133,12 @@ addEventListener('resize', () => {
         console.log("No appropriate GPUAdapter found.");
         return;
     }
-    const device = await adapter.requestDevice();
+
+    const hasTimestampQuery = adapter.features.has('timestamp-query');
+
+    const device = await adapter.requestDevice({
+        requiredFeatures: hasTimestampQuery ? ['timestamp-query'] : [],
+    });
 
     const ctx = canvas.getContext("webgpu");
     const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
@@ -198,6 +243,42 @@ addEventListener('resize', () => {
         }
     });
 
+    const renderPassDescriptor = {
+        colorAttachments: [{
+            view: undefined,
+            loadOp: "clear",
+            storeOp: "store",
+            clearValue: { r: 0.051, g: 0.067, b: 0.09, a: 1 }
+        }]
+    };
+
+    const computePassDescriptor = {};
+
+    let querySet = undefined;
+    let resolveBuffer = undefined;
+    const spareResultBuffers = [];
+
+    if (hasTimestampQuery) {
+        querySet = device.createQuerySet({
+            type: 'timestamp',
+            count: 4,
+        });
+        resolveBuffer = device.createBuffer({
+            size: 4 * BigInt64Array.BYTES_PER_ELEMENT,
+            usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
+        });
+        computePassDescriptor.timestampWrites = {
+            querySet,
+            beginningOfPassWriteIndex: 0,
+            endOfPassWriteIndex: 1,
+        };
+        renderPassDescriptor.timestampWrites = {
+            querySet,
+            beginningOfPassWriteIndex: 2,
+            endOfPassWriteIndex: 3,
+        };
+    }
+
     const vertexBufferData = new Float32Array(getVertices(polygonPoints));
     const vertexBuffer = device.createBuffer({
         size: vertexBufferData.byteLength,
@@ -273,16 +354,20 @@ addEventListener('resize', () => {
     let deltaTime = 0;
     let lastFrameTime = performance.now();
 
+    let computePassDurationSum = 0;
+    let renderPassDurationSum = 0;
+    let timerSamples = 0;
+
     const iteration = async () => {
         const startTime = performance.now();
-        updateFramerate(1000 / (startTime - lastFrameTime));
+        updateFramerate(startTime - lastFrameTime);
         lastFrameTime = startTime;
         updateParams(deltaTime * speed);
 
         const commandEncoder = device.createCommandEncoder();
 
         if (running) {
-            const computePass = commandEncoder.beginComputePass();
+            const computePass = commandEncoder.beginComputePass(computePassDescriptor);
             computePass.setPipeline(computePipeline);
             computePass.setBindGroup(0, paramsBindGroup);
             computePass.setBindGroup(1, particleBindGroups[t % 2]);
@@ -290,27 +375,45 @@ addEventListener('resize', () => {
             computePass.end();
         }
 
-        const renderPass = commandEncoder.beginRenderPass({
-            colorAttachments: [{
-                view: ctx.getCurrentTexture().createView(),
-                loadOp: "clear",
-                storeOp: "store",
-                clearValue: { r: 0.051, g: 0.067, b: 0.09, a: 1 }
-            }]
-        });
+        renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView();
+        const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor);
 
         renderPass.setPipeline(renderPipeline);
         renderPass.setVertexBuffer(0, particleBuffers[(t + 1) % 2]);
         renderPass.setVertexBuffer(1, vertexBuffer);
         renderPass.setBindGroup(0, paramsBindGroup);
         renderPass.draw(vertexBufferData.length / 2, bodyCount, 0, 0);
-
         renderPass.end();
 
-        const gpuCommands = commandEncoder.finish();
+        let resultBuffer = undefined;
+        if (hasTimestampQuery) {
+            resultBuffer =
+                spareResultBuffers.pop() ||
+                device.createBuffer({
+                    size: 4 * BigInt64Array.BYTES_PER_ELEMENT,
+                    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+                });
+            commandEncoder.resolveQuerySet(querySet, 0, 4, resolveBuffer, 0);
+            commandEncoder.copyBufferToBuffer(resolveBuffer, 0, resultBuffer, 0, resultBuffer.size);
+        }
 
-        device.queue.submit([gpuCommands]);
+
+        device.queue.submit([commandEncoder.finish()]);
         await device.queue.onSubmittedWorkDone();
+
+        if (hasTimestampQuery) {
+            resultBuffer.mapAsync(GPUMapMode.READ).then(() => {
+                const times = new BigInt64Array(resultBuffer.getMappedRange());
+                const computePassDuration = Number(times[1] - times[0]);
+                const renderPassDuration = Number(times[3] - times[2]);
+
+                resultBuffer.unmap();
+
+                updatePassTimes(computePassDuration, renderPassDuration);
+
+                spareResultBuffers.push(resultBuffer);
+            });
+        }
 
         deltaTime = performance.now() - startTime;
 
