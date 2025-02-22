@@ -351,18 +351,19 @@ addEventListener('resize', () => {
     }
 
     let t = 0;
-    let deltaTime = 0;
-    let lastFrameTime = performance.now();
+    let lastTime = performance.now();
 
-    let computePassDurationSum = 0;
-    let renderPassDurationSum = 0;
-    let timerSamples = 0;
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) {
+            lastTime = performance.now();
+        }   
+    });
 
-    const iteration = async () => {
-        const startTime = performance.now();
-        updateFramerate(startTime - lastFrameTime);
-        lastFrameTime = startTime;
+    const iteration = async (startTime) => {
+        const deltaTime = startTime - lastTime;
+        updateFramerate(deltaTime);
         updateParams(deltaTime * speed);
+        lastTime = startTime;
 
         const commandEncoder = device.createCommandEncoder();
 
@@ -408,14 +409,11 @@ addEventListener('resize', () => {
                 const renderPassDuration = Number(times[3] - times[2]);
 
                 resultBuffer.unmap();
-
                 updatePassTimes(computePassDuration, renderPassDuration);
 
                 spareResultBuffers.push(resultBuffer);
             });
         }
-
-        deltaTime = performance.now() - startTime;
 
         if (running) ++t;
         requestAnimationFrame(iteration);
