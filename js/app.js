@@ -8,7 +8,7 @@ const loadShader = async (name) => {
 let running = true;
 let speed = 1;
 let zoom = 0.0005;
-const bodyCount = 1000;
+const bodyCount = 2000;
 const radius = 1500;
 const spread = 500;
 const velocity = 2.5;
@@ -35,7 +35,11 @@ greatAttractor.style.borderRadius = "8px";
 greatAttractor.style.backgroundColor = "aqua";
 greatAttractor.style.position = "absolute";
 
-let bodies = [0, 0, 0, 0, 0, 0, greatAttractorMass, 0]; // a great attractor
+let bodies = [
+    0, 0, 0, 0, // position + offset
+    0, 0, 0, 0, // velocity + offset
+    0, 0, 0, greatAttractorMass // acceleartion + mass
+]; // a great attractor
 
 for (let i = 1; i < bodyCount; ++i) {
     const angle = (2 * Math.PI) * Math.random();
@@ -46,7 +50,11 @@ for (let i = 1; i < bodyCount; ++i) {
 
     const velocityFactor = Math.sqrt(radius / randomRadius); // scale starting velocity based on distance
 
-    bodies = bodies.concat([randomRadius * x, randomRadius * y, -velocity * y * velocityFactor, velocity * x * velocityFactor, 0, 0, 10, 0]);
+    bodies = bodies.concat([
+        randomRadius * x, randomRadius * y, 0, 0, // position + offset
+        -velocity * y * velocityFactor, velocity * x * velocityFactor, 0, 0, // velocity + offset
+        0, 0, 0, 10 // acceleration + mass
+    ]);
 }
 
 let frameTimeSum = 0;
@@ -203,18 +211,18 @@ addEventListener('resize', () => {
             entryPoint: "vertexMain",
             buffers: [
                 {
-                    arrayStride: 8 * 4,
+                    arrayStride: 48,
                     stepMode: 'instance',
                     attributes: [
                         {
                             shaderLocation: 0,
                             offset: 0,
-                            format: 'float32x2',
+                            format: 'float32x3',
                         },
                         {
                             shaderLocation: 1,
-                            offset: 2 * 4,
-                            format: 'float32x2',
+                            offset: 16,
+                            format: 'float32x3',
                         },
                     ],
                 },
@@ -356,7 +364,7 @@ addEventListener('resize', () => {
     document.addEventListener("visibilitychange", () => {
         if (!document.hidden) {
             lastTime = performance.now();
-        }   
+        }
     });
 
     const iteration = async (startTime) => {

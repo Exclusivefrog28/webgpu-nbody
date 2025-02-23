@@ -13,15 +13,17 @@ struct VertexOutput {
 
 @vertex
 fn vertexMain (
-  @location(0) a_particlePos : vec2f,
-  @location(1) a_particleVel : vec2f,
+  @location(0) a_particlePos : vec3f,
+  @location(1) a_particleVel : vec3f,
   @location(2) a_pos : vec2f
 ) -> VertexOutput {
     let angle = -atan2(a_particleVel.x, a_particleVel.y);
     let pos = a_pos * params.zoom * 10;
 
+    let twoDpos = vec2(a_particlePos.x, a_particlePos.y);
+
     var output : VertexOutput;
-    output.position = vec4(pos + a_particlePos * params.zoom, 0.0, 1.0);
+    output.position = vec4(pos + twoDpos * params.zoom, 0.0, 1.0);
     output.position.y = output.position.y * params.aspectRatio;
 
     let velocity = a_particleVel.x * a_particleVel.x + a_particleVel.y * a_particleVel.y;

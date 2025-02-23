@@ -1,7 +1,7 @@
 struct Body {
-    position: vec2<f32>,
-    velocity: vec2<f32>,
-    acceleration: vec2<f32>,
+    position: vec3<f32>,
+    velocity: vec3<f32>,
+    acceleration: vec3<f32>,
     mass: f32
 }
 
@@ -25,35 +25,26 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
 
     let body = bodiesA[global_id.x];
 
-    let midVelocity = vec2(
-        body.velocity.x + 0.5 * body.acceleration.x * params.deltaTime,
-        body.velocity.y + 0.5 * body.acceleration.y * params.deltaTime
-    );
+    let midVelocity = body.velocity + 0.5 * body.acceleration * params.deltaTime;
 
-    let newPosition = vec2(
-        body.position.x + midVelocity.x * params.deltaTime,
-        body.position.y + midVelocity.y * params.deltaTime
-    );
+    let newPosition = body.position + midVelocity * params.deltaTime;
 
-    var newAcceleration = vec2(0.0, 0.0);
+    var newAcceleration = vec3(0.0, 0.0, 0.0);
 
     for (var i = 0u; i < arrayLength(&bodiesA); i = i + 1) {
         if i == global_id.x {continue;}
         let attractor = bodiesA[i];
 
-        let pathBetween = vec2(attractor.position.x - newPosition.x, attractor.position.y - newPosition.y);
+        let pathBetween = attractor.position - newPosition;
         let direction = normalize(pathBetween);
-        let squaredDistance = max(pathBetween.x * pathBetween.x + pathBetween.y * pathBetween.y, 100);
+        let squaredDistance = max(pathBetween.x * pathBetween.x + pathBetween.y * pathBetween.y + pathBetween.z * pathBetween.z, 100);
 
         let forceScalar = gravConst * ((body.mass * attractor.mass) / squaredDistance);
         let accelerationScalar = forceScalar / body.mass;
-        newAcceleration = vec2(newAcceleration.x + direction.x * accelerationScalar, newAcceleration.y + direction.y * accelerationScalar);
+        newAcceleration = newAcceleration + direction * accelerationScalar;
     }
 
-    let newVelocity = vec2(
-        midVelocity.x + 0.5 * newAcceleration.x * params.deltaTime,
-        midVelocity.y + 0.5 * newAcceleration.y * params.deltaTime
-    );
+    let newVelocity = midVelocity + 0.5 * newAcceleration * params.deltaTime;
 
     bodiesB[global_id.x] = Body(newPosition, newVelocity, newAcceleration, body.mass);
 }
