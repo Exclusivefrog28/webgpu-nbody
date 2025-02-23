@@ -8,7 +8,7 @@ struct Body {
 struct Params {
     deltaTime : f32,
     zoom: f32,
-    aspectRatio: f32
+    projection: mat4x4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> params : Params;

@@ -1,4 +1,5 @@
 import { getVertices } from './circle.js';
+import { vec4, mat4 } from 'https://wgpu-matrix.org/dist/3.x/wgpu-matrix.module.min.js';
 
 const loadShader = async (name) => {
     let shaderCode = await fetch(`shader/${name}.wgsl`);
@@ -7,8 +8,8 @@ const loadShader = async (name) => {
 
 let running = true;
 let speed = 1;
-let zoom = 0.0005;
-const bodyCount = 2000;
+let zoom = 3000;
+const bodyCount = 1000;
 const radius = 1500;
 const spread = 500;
 const velocity = 2.5;
@@ -74,7 +75,7 @@ const updateFramerate = (value) => {
 let computePassDurationSum = 0;
 let renderPassDurationSum = 0;
 let timerSamples = 0;
-const timerSamplesPerUpdate = 5;
+const timerSamplesPerUpdate = 10;
 const updatePassTimes = (computePassDuration, renderPassDuration) => {
     if (computePassDuration > 0 && renderPassDuration > 0) {
         computePassDurationSum += computePassDuration;
@@ -107,7 +108,7 @@ speedBtn.addEventListener("click", () => {
 });
 
 document.addEventListener("wheel", (event) => {
-    zoom *= (-event.deltaY / 1000) + 1;
+    zoom *= (event.deltaY / 1000) + 1;
 });
 
 let hypo = undefined;
@@ -119,16 +120,20 @@ document.addEventListener('touchmove', (event) => {
         if (hypo === undefined) {
             hypo = hypo1;
         }
-        zoom *= ((hypo1 / hypo - 1) * 0.5) + 1;
+        zoom *= ((-hypo1 / hypo - 1) * 0.5) + 1;
     }
 }, false);
 document.addEventListener('touchend', () => {
     hypo = undefined;
 }, false);
 
+const fov = Math.PI / 3;
+
+let perspective = mat4.perspective(fov, canvas.width / canvas.height, 0.1, 10000);
 addEventListener('resize', () => {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    perspective = mat4.perspective(fov, canvas.width / canvas.height, 0.1, 10000);
 }, false);
 
 (async () => {
@@ -296,9 +301,8 @@ addEventListener('resize', () => {
     new Float32Array(vertexBuffer.getMappedRange()).set(vertexBufferData);
     vertexBuffer.unmap();
 
-    const paramCount = 3;
     const paramsBuffer = device.createBuffer({
-        size: paramCount * Float32Array.BYTES_PER_ELEMENT,
+        size: 80,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     })
 
@@ -355,7 +359,13 @@ addEventListener('resize', () => {
     });
 
     const updateParams = (deltaTime) => {
-        device.queue.writeBuffer(paramsBuffer, 0, new Float32Array([deltaTime, zoom, canvas.width / canvas.height]));
+        let view =  mat4.lookAt([0, 0, -1 * zoom], [0, 0, 0], [0, 1, 0]);
+        const projection = mat4.multiply(perspective, mat4.rotateX(view, 1 * Math.PI / 3));
+
+        device.queue.writeBuffer(paramsBuffer, 0, new Float32Array([
+            deltaTime, 0, 0, 0,
+            ...projection,
+        ]));
     }
 
     let t = 0;
