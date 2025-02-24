@@ -1,5 +1,5 @@
-import { getVertices } from './circle.js';
-import { vec4, mat4 } from 'https://wgpu-matrix.org/dist/3.x/wgpu-matrix.module.min.js';
+import { getSphere } from './mesh.js';
+import { mat4 } from 'https://wgpu-matrix.org/dist/3.x/wgpu-matrix.module.min.js';
 
 const loadShader = async (name) => {
     let shaderCode = await fetch(`shader/${name}.wgsl`);
@@ -15,7 +15,7 @@ const spread = 500;
 const velocity = 2.5;
 const greatAttractorMass = 1000000;
 
-const polygonPoints = 16;
+const subDivisions = 2;
 
 const canvas = document.getElementById("canvas");
 const framerateElem = document.getElementById("framerate");
@@ -52,7 +52,7 @@ for (let i = 1; i < bodyCount; ++i) {
     const velocityFactor = Math.sqrt(radius / randomRadius); // scale starting velocity based on distance
 
     bodies = bodies.concat([
-        randomRadius * x, randomRadius * y, 0, 0, // position + offset
+        randomRadius * x, randomRadius * y, (-0.5 + Math.random()) * 500, 0, // position + offset
         -velocity * y * velocityFactor, velocity * x * velocityFactor, 0, 0, // velocity + offset
         0, 0, 0, 10 // acceleration + mass
     ]);
@@ -129,11 +129,11 @@ document.addEventListener('touchend', () => {
 
 const fov = Math.PI / 3;
 
-let perspective = mat4.perspective(fov, canvas.width / canvas.height, 0.1, 10000);
+let perspective = mat4.perspective(fov, canvas.width / canvas.height, 0.1);
 addEventListener('resize', () => {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    perspective = mat4.perspective(fov, canvas.width / canvas.height, 0.1, 10000);
+    perspective = mat4.perspective(fov, canvas.width / canvas.height, 0.1);
 }, false);
 
 (async () => {
@@ -232,13 +232,13 @@ addEventListener('resize', () => {
                     ],
                 },
                 {
-                    arrayStride: 2 * 4,
+                    arrayStride: 3 * 4,
                     stepMode: 'vertex',
                     attributes: [
                         {
                             shaderLocation: 2,
                             offset: 0,
-                            format: 'float32x2',
+                            format: 'float32x3',
                         },
                     ],
                 },
@@ -253,6 +253,8 @@ addEventListener('resize', () => {
         },
         primitive: {
             topology: 'triangle-list',
+            frontFace: 'cw',
+            cullMode: 'back',
         }
     });
 
@@ -292,7 +294,7 @@ addEventListener('resize', () => {
         };
     }
 
-    const vertexBufferData = new Float32Array(getVertices(polygonPoints));
+    const vertexBufferData = new Float32Array(getSphere(subDivisions));
     const vertexBuffer = device.createBuffer({
         size: vertexBufferData.byteLength,
         usage: GPUBufferUsage.VERTEX,
@@ -359,8 +361,8 @@ addEventListener('resize', () => {
     });
 
     const updateParams = (deltaTime) => {
-        let view =  mat4.lookAt([0, 0, -1 * zoom], [0, 0, 0], [0, 1, 0]);
-        const projection = mat4.multiply(perspective, mat4.rotateX(view, 1 * Math.PI / 3));
+        let view =  mat4.lookAt([0, 0, 1 * zoom], [0, 0, 0], [0, 1, 0]);
+        const projection = mat4.multiply(perspective, mat4.rotateX(view, -Math.PI / 3));
 
         device.queue.writeBuffer(paramsBuffer, 0, new Float32Array([
             deltaTime, 0, 0, 0,
@@ -401,7 +403,7 @@ addEventListener('resize', () => {
         renderPass.setVertexBuffer(0, particleBuffers[(t + 1) % 2]);
         renderPass.setVertexBuffer(1, vertexBuffer);
         renderPass.setBindGroup(0, paramsBindGroup);
-        renderPass.draw(vertexBufferData.length / 2, bodyCount, 0, 0);
+        renderPass.draw(vertexBufferData.length / 3, bodyCount, 0, 0);
         renderPass.end();
 
         let resultBuffer = undefined;
