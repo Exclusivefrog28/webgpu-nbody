@@ -1,5 +1,5 @@
+import { getProjection } from './camera.js';
 import { getSphere } from './mesh.js';
-import { mat4 } from 'https://wgpu-matrix.org/dist/3.x/wgpu-matrix.module.min.js';
 
 const loadShader = async (name) => {
     let shaderCode = await fetch(`shader/${name}.wgsl`);
@@ -8,7 +8,6 @@ const loadShader = async (name) => {
 
 let running = true;
 let speed = 1;
-let zoom = 3000;
 const bodyCount = 1000;
 const radius = 1500;
 const spread = 500;
@@ -28,6 +27,11 @@ const speedLabel = document.getElementById("speedLabel")
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
+window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}, false);
+
 
 const greatAttractor = document.createElement("div");
 greatAttractor.style.width = "16px";
@@ -60,7 +64,7 @@ for (let i = 1; i < bodyCount; ++i) {
 
 let frameTimeSum = 0;
 let frameTimerSamples = 0
-const frameTimerSamplesPerUpdate = 5;
+const frameTimerSamplesPerUpdate = 10;
 const updateFramerate = (value) => {
     frameTimeSum += value;
     frameTimerSamples++;
@@ -75,7 +79,7 @@ const updateFramerate = (value) => {
 let computePassDurationSum = 0;
 let renderPassDurationSum = 0;
 let timerSamples = 0;
-const timerSamplesPerUpdate = 10;
+const timerSamplesPerUpdate = 20;
 const updatePassTimes = (computePassDuration, renderPassDuration) => {
     if (computePassDuration > 0 && renderPassDuration > 0) {
         computePassDurationSum += computePassDuration;
@@ -107,34 +111,6 @@ speedBtn.addEventListener("click", () => {
     speedLabel.innerHTML = `${speed.toFixed(1)}x`;
 });
 
-document.addEventListener("wheel", (event) => {
-    zoom *= (event.deltaY / 1000) + 1;
-});
-
-let hypo = undefined;
-document.addEventListener('touchmove', (event) => {
-    event.preventDefault();
-    if (event.touches.length === 2) {
-        let hypo1 = Math.hypot((event.touches[0].pageX - event.touches[1].pageX),
-            (event.touches[0].pageY - event.touches[1].pageY));
-        if (hypo === undefined) {
-            hypo = hypo1;
-        }
-        zoom *= ((-hypo1 / hypo - 1) * 0.5) + 1;
-    }
-}, false);
-document.addEventListener('touchend', () => {
-    hypo = undefined;
-}, false);
-
-const fov = Math.PI / 3;
-
-let perspective = mat4.perspective(fov, canvas.width / canvas.height, 0.1);
-addEventListener('resize', () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    perspective = mat4.perspective(fov, canvas.width / canvas.height, 0.1);
-}, false);
 
 (async () => {
     if (!navigator.gpu) {
@@ -361,12 +337,8 @@ addEventListener('resize', () => {
     });
 
     const updateParams = (deltaTime) => {
-        let view =  mat4.lookAt([0, 0, 1 * zoom], [0, 0, 0], [0, 1, 0]);
-        const projection = mat4.multiply(perspective, mat4.rotateX(view, -Math.PI / 3));
-
         device.queue.writeBuffer(paramsBuffer, 0, new Float32Array([
-            deltaTime, 0, 0, 0,
-            ...projection,
+            deltaTime, 0, 0, 0, ...getProjection()
         ]));
     }
 
