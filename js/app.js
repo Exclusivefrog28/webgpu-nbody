@@ -205,6 +205,11 @@ speedBtn.addEventListener("click", () => {
                             offset: 16,
                             format: 'float32x3',
                         },
+                        {
+                            shaderLocation: 2,
+                            offset: 44,
+                            format: 'float32',
+                        },
                     ],
                 },
                 {
@@ -212,7 +217,7 @@ speedBtn.addEventListener("click", () => {
                     stepMode: 'vertex',
                     attributes: [
                         {
-                            shaderLocation: 2,
+                            shaderLocation: 3,
                             offset: 0,
                             format: 'float32x3',
                         },
@@ -231,6 +236,11 @@ speedBtn.addEventListener("click", () => {
             topology: 'triangle-list',
             frontFace: 'cw',
             cullMode: 'back',
+        },
+        depthStencil: {
+            depthWriteEnabled: true,
+            depthCompare: 'less',
+            format: 'depth24plus',
         }
     });
 
@@ -240,7 +250,34 @@ speedBtn.addEventListener("click", () => {
             loadOp: "clear",
             storeOp: "store",
             clearValue: { r: 0.051, g: 0.067, b: 0.09, a: 1 }
-        }]
+        }],
+        depthStencilAttachment: {
+            view: undefined,
+            depthClearValue: 1.0,
+            depthLoadOp: 'clear',
+            depthStoreOp: 'store',
+          },
+    };
+
+    let depthTexture = undefined;
+    const updateDescriptor = () => {
+        const canvasTexture = ctx.getCurrentTexture();
+        
+        if (!depthTexture ||
+            depthTexture.width !== canvasTexture.width ||
+            depthTexture.height !== canvasTexture.height) {
+          if (depthTexture) {
+            depthTexture.destroy();
+          }
+          depthTexture = device.createTexture({
+            size: [canvasTexture.width, canvasTexture.height],
+            format: 'depth24plus',
+            usage: GPUTextureUsage.RENDER_ATTACHMENT,
+          });
+        }
+
+        renderPassDescriptor.colorAttachments[0].view = canvasTexture.createView();
+        renderPassDescriptor.depthStencilAttachment.view = depthTexture.createView();
     };
 
     const computePassDescriptor = {};
@@ -368,7 +405,7 @@ speedBtn.addEventListener("click", () => {
             computePass.end();
         }
 
-        renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView();
+        updateDescriptor();
         const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor);
 
         renderPass.setPipeline(renderPipeline);

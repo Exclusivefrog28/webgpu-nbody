@@ -14,9 +14,10 @@ struct VertexOutput {
 fn vertexMain (
   @location(0) a_particlePos : vec3f,
   @location(1) a_particleVel : vec3f,
-  @location(2) a_pos : vec3f
+  @location(2) a_mass : f32,
+  @location(3) a_pos : vec3f
 ) -> VertexOutput {
-    let pos = a_pos * 10;
+    let pos = a_pos * pow(a_mass, 1.0 / 3.0) * 3;
     
     var output : VertexOutput;
     output.position = params.projection * vec4(pos + a_particlePos, 1.0);

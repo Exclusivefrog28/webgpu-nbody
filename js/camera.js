@@ -52,7 +52,7 @@ addEventListener('touchmove', (e) => {
         handleDragMovement(e.touches[0].clientX, e.touches[0].clientY);
     } else if (e.touches.length === 2) {
         const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
-        const pinchRatio = currentDistance / initialPinchDistance;
+        const pinchRatio =  initialPinchDistance / currentDistance;
         
         vec3.mulScalar(eye, pinchRatio, eye);
         initialPinchDistance = currentDistance;
