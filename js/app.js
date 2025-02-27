@@ -8,13 +8,13 @@ const loadShader = async (name) => {
 
 let running = true;
 let speed = 1;
-const bodyCount = 1000;
+const bodyCount = 2;
 const radius = 1500;
 const spread = 500;
 const velocity = 2.5;
 const greatAttractorMass = 1000000;
 
-const subDivisions = 2;
+const subDivisions = 3;
 
 const canvas = document.getElementById("canvas");
 const framerateElem = document.getElementById("framerate");
@@ -41,26 +41,29 @@ greatAttractor.style.backgroundColor = "aqua";
 greatAttractor.style.position = "absolute";
 
 let bodies = [
-    0, 0, 0, 0, // position + offset
+    0, 0, 0, 100, // position + radius
     0, 0, 0, 0, // velocity + offset
+    0, 0, 0, greatAttractorMass, // acceleartion + mass
+    500, 0, 0, 100, // position + radius
+    -1, 0, 0, 0, // velocity + offset
     0, 0, 0, greatAttractorMass // acceleartion + mass
 ]; // a great attractor
 
-for (let i = 1; i < bodyCount; ++i) {
-    const angle = (2 * Math.PI) * Math.random();
-    const y = Math.cos(angle);
-    const x = Math.sin(angle);
+// for (let i = 1; i < bodyCount; ++i) {
+//     const angle = (2 * Math.PI) * Math.random();
+//     const y = Math.cos(angle);
+//     const x = Math.sin(angle);
 
-    const randomRadius = radius + (Math.random() - 1) * spread;
+//     const randomRadius = radius + (Math.random() - 1) * spread;
 
-    const velocityFactor = Math.sqrt(radius / randomRadius); // scale starting velocity based on distance
+//     const velocityFactor = Math.sqrt(radius / randomRadius); // scale starting velocity based on distance
 
-    bodies = bodies.concat([
-        randomRadius * x, randomRadius * y, (-0.5 + Math.random()) * 500, 0, // position + offset
-        -velocity * y * velocityFactor, velocity * x * velocityFactor, 0, 0, // velocity + offset
-        0, 0, 0, 10 // acceleration + mass
-    ]);
-}
+//     bodies = bodies.concat([
+//         randomRadius * x, randomRadius * y, (-0.5 + Math.random()) * 500, 10, // position + radius
+//         -velocity * y * velocityFactor, velocity * x * velocityFactor, 0, 0, // velocity + offset
+//         0, 0, 0, 10 // acceleration + mass
+//     ]);
+// }
 
 let frameTimeSum = 0;
 let frameTimerSamples = 0
@@ -207,7 +210,7 @@ speedBtn.addEventListener("click", () => {
                         },
                         {
                             shaderLocation: 2,
-                            offset: 44,
+                            offset: 12,
                             format: 'float32',
                         },
                     ],

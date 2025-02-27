@@ -1,5 +1,6 @@
 struct Body {
     position: vec3<f32>,
+    radius: f32,
     velocity: vec3<f32>,
     acceleration: vec3<f32>,
     mass: f32
@@ -19,10 +20,6 @@ const gravConst = 0.01;
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3u) {
-    if global_id.x >= u32(arrayLength(&bodiesA)) {
-        return;
-    }
-
     let body = bodiesA[global_id.x];
 
     let midVelocity = body.velocity + 0.5 * body.acceleration * params.deltaTime;
@@ -46,5 +43,5 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
 
     let newVelocity = midVelocity + 0.5 * newAcceleration * params.deltaTime;
 
-    bodiesB[global_id.x] = Body(newPosition, newVelocity, newAcceleration, body.mass);
+    bodiesB[global_id.x] = Body(newPosition, body.radius, newVelocity, newAcceleration, body.mass);
 }
