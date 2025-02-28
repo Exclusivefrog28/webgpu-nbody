@@ -1,5 +1,6 @@
 import { getProjection } from './camera.js';
 import { getSphere } from './mesh.js';
+import { generateBodies } from './scene.js';
 
 const loadShader = async (name) => {
     let shaderCode = await fetch(`shader/${name}.wgsl`);
@@ -8,17 +9,17 @@ const loadShader = async (name) => {
 
 let running = true;
 let speed = 1;
-const bodyCount = 2;
+
+const bodyCount = 1000;
 const radius = 1500;
-const spread = 500;
-const velocity = 2.5;
+const spread = 200;
 const greatAttractorMass = 1000000;
 
 const subDivisions = 3;
 
 const canvas = document.getElementById("canvas");
 const framerateElem = document.getElementById("framerate");
-const computeTimeElem = document.getElementById("computetime");
+const attractionTimeElem = document.getElementById("attractiontime");
 const renderTimeElem = document.getElementById("rendertime");
 const startBtn = document.getElementById("play");
 const stopBtn = document.getElementById("pause");
@@ -40,30 +41,7 @@ greatAttractor.style.borderRadius = "8px";
 greatAttractor.style.backgroundColor = "aqua";
 greatAttractor.style.position = "absolute";
 
-let bodies = [
-    0, 0, 0, 100, // position + radius
-    0, 0, 0, 0, // velocity + offset
-    0, 0, 0, greatAttractorMass, // acceleartion + mass
-    500, 0, 0, 100, // position + radius
-    -1, 0, 0, 0, // velocity + offset
-    0, 0, 0, greatAttractorMass // acceleartion + mass
-]; // a great attractor
-
-// for (let i = 1; i < bodyCount; ++i) {
-//     const angle = (2 * Math.PI) * Math.random();
-//     const y = Math.cos(angle);
-//     const x = Math.sin(angle);
-
-//     const randomRadius = radius + (Math.random() - 1) * spread;
-
-//     const velocityFactor = Math.sqrt(radius / randomRadius); // scale starting velocity based on distance
-
-//     bodies = bodies.concat([
-//         randomRadius * x, randomRadius * y, (-0.5 + Math.random()) * 500, 10, // position + radius
-//         -velocity * y * velocityFactor, velocity * x * velocityFactor, 0, 0, // velocity + offset
-//         0, 0, 0, 10 // acceleration + mass
-//     ]);
-// }
+let bodies = generateBodies().addGreatAttractor(100, greatAttractorMass).addRandomOrbiters(bodyCount - 1, radius, spread, greatAttractorMass, 10).get();
 
 let frameTimeSum = 0;
 let frameTimerSamples = 0
@@ -79,29 +57,30 @@ const updateFramerate = (value) => {
     }
 }
 
-let computePassDurationSum = 0;
+let attractionPassDurationSum = 0;
 let renderPassDurationSum = 0;
 let timerSamples = 0;
 const timerSamplesPerUpdate = 20;
-const updatePassTimes = (computePassDuration, renderPassDuration) => {
-    if (computePassDuration > 0 && renderPassDuration > 0) {
-        computePassDurationSum += computePassDuration;
+
+const updatePassTimes = (attractionPassDuration, renderPassDuration) => {
+    if (attractionPassDuration > 0 && renderPassDuration > 0) {
+        attractionPassDurationSum += attractionPassDuration;
         renderPassDurationSum += renderPassDuration;
         timerSamples++;
     }
 
     if (timerSamples >= timerSamplesPerUpdate) {
         const avgComputeMicroseconds = Math.round(
-            computePassDurationSum / timerSamples / 1000
+            attractionPassDurationSum / timerSamples / 1000
         );
         const avgRenderMicroseconds = Math.round(
             renderPassDurationSum / timerSamples / 1000
         );
 
-        computeTimeElem.innerHTML = avgComputeMicroseconds;
+        attractionTimeElem.innerHTML = avgComputeMicroseconds;
         renderTimeElem.innerHTML = avgRenderMicroseconds;
 
-        computePassDurationSum = 0;
+        attractionPassDurationSum = 0;
         renderPassDurationSum = 0;
         timerSamples = 0;
     }
@@ -139,15 +118,15 @@ speedBtn.addEventListener("click", () => {
         format: canvasFormat,
     });
 
-    const computeModule = device.createShaderModule({
-        code: await loadShader('compute')
+    const attractionModule = device.createShaderModule({
+        code: await loadShader('attraction')
     });
     const renderModule = device.createShaderModule({
         code: await loadShader('render')
     });
 
-    const computeLayout = device.createBindGroupLayout({
-        label: 'computeGroup',
+    const attractionLayout = device.createBindGroupLayout({
+        label: 'attractionGroup',
         entries: [
             {
                 binding: 0,
@@ -173,13 +152,13 @@ speedBtn.addEventListener("click", () => {
     });
 
 
-    const computePipeline = device.createComputePipeline({
-        label: "Compute pipeline",
+    const attractionPipeline = device.createComputePipeline({
+        label: "Attraction pipeline",
         layout: device.createPipelineLayout({
-            bindGroupLayouts: [paramLayout, computeLayout],
+            bindGroupLayouts: [paramLayout, attractionLayout],
         }),
         compute: {
-            module: computeModule,
+            module: attractionModule,
             entryPoint: "main"
         }
     });
@@ -283,7 +262,7 @@ speedBtn.addEventListener("click", () => {
         renderPassDescriptor.depthStencilAttachment.view = depthTexture.createView();
     };
 
-    const computePassDescriptor = {};
+    const attractionPassDescriptor = {};
 
     let querySet = undefined;
     let resolveBuffer = undefined;
@@ -298,7 +277,7 @@ speedBtn.addEventListener("click", () => {
             size: 4 * BigInt64Array.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
         });
-        computePassDescriptor.timestampWrites = {
+        attractionPassDescriptor.timestampWrites = {
             querySet,
             beginningOfPassWriteIndex: 0,
             endOfPassWriteIndex: 1,
@@ -324,39 +303,39 @@ speedBtn.addEventListener("click", () => {
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     })
 
-    const particleArray = new Float32Array(bodies);
-    const particleBuffers = new Array(2);
-    const particleBindGroups = new Array(2);
+    const bodyArray = new Float32Array(bodies);
+    const bodyBuffers = new Array(2);
+    const bodyBindGroups = new Array(2);
     for (let i = 0; i < 2; ++i) {
-        particleBuffers[i] = device.createBuffer({
-            size: particleArray.byteLength,
+        bodyBuffers[i] = device.createBuffer({
+            size: bodyArray.byteLength,
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE,
             mappedAtCreation: true,
         });
-        new Float32Array(particleBuffers[i].getMappedRange()).set(
-            particleArray
+        new Float32Array(bodyBuffers[i].getMappedRange()).set(
+            bodyArray
         );
-        particleBuffers[i].unmap();
+        bodyBuffers[i].unmap();
     }
     for (let i = 0; i < 2; ++i) {
-        particleBindGroups[i] = device.createBindGroup({
+        bodyBindGroups[i] = device.createBindGroup({
             label: `particleBindGroup${i}`,
-            layout: computePipeline.getBindGroupLayout(1),
+            layout: attractionPipeline.getBindGroupLayout(1),
             entries: [
                 {
                     binding: 0,
                     resource: {
-                        buffer: particleBuffers[i],
+                        buffer: bodyBuffers[i],
                         offset: 0,
-                        size: particleArray.byteLength,
+                        size: bodyArray.byteLength,
                     },
                 },
                 {
                     binding: 1,
                     resource: {
-                        buffer: particleBuffers[(i + 1) % 2],
+                        buffer: bodyBuffers[(i + 1) % 2],
                         offset: 0,
-                        size: particleArray.byteLength,
+                        size: bodyArray.byteLength,
                     },
                 },
             ],
@@ -365,7 +344,7 @@ speedBtn.addEventListener("click", () => {
 
     const paramsBindGroup = device.createBindGroup({
         label: 'paramsBindGroup',
-        layout: computePipeline.getBindGroupLayout(0),
+        layout: attractionPipeline.getBindGroupLayout(0),
         entries: [
             {
                 binding: 0,
@@ -400,19 +379,19 @@ speedBtn.addEventListener("click", () => {
         const commandEncoder = device.createCommandEncoder();
 
         if (running) {
-            const computePass = commandEncoder.beginComputePass(computePassDescriptor);
-            computePass.setPipeline(computePipeline);
-            computePass.setBindGroup(0, paramsBindGroup);
-            computePass.setBindGroup(1, particleBindGroups[t % 2]);
-            computePass.dispatchWorkgroups(Math.ceil(bodyCount / 64));
-            computePass.end();
+            const attractionPass = commandEncoder.beginComputePass(attractionPassDescriptor);
+            attractionPass.setPipeline(attractionPipeline);
+            attractionPass.setBindGroup(0, paramsBindGroup);
+            attractionPass.setBindGroup(1, bodyBindGroups[t % 2]);
+            attractionPass.dispatchWorkgroups(Math.ceil(bodyCount / 64));
+            attractionPass.end();
         }
 
         updateDescriptor();
         const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor);
 
         renderPass.setPipeline(renderPipeline);
-        renderPass.setVertexBuffer(0, particleBuffers[(t + 1) % 2]);
+        renderPass.setVertexBuffer(0, bodyBuffers[(t + 1) % 2]);
         renderPass.setVertexBuffer(1, vertexBuffer);
         renderPass.setBindGroup(0, paramsBindGroup);
         renderPass.draw(vertexBufferData.length / 3, bodyCount, 0, 0);
